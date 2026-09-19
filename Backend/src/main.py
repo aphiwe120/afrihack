@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from models import Claim, FinancialProduct, Reminder, User
@@ -12,6 +12,11 @@ from schemas import (
     FinancialProductCreate,
     FinancialProductRead,
     FinancialProductUpdate,
+    ComplianceReportResponse,
+    ComplianceClientStatus,
+    ReminderCreate,
+    ReminderRead,
+    ReminderUpdate,
 )
 import uuid
 
@@ -48,6 +53,7 @@ def get_current_user():
 # ==============================================================================
 @app.post("/auth/register", tags=["Auth"])
 async def register_user(db = Depends(get_db)):
+
     pass
 
 @app.post("/auth/login", tags=["Auth"])
@@ -232,17 +238,124 @@ async def dispatch_claim_to_insurer(claim_id: uuid.UUID, current_user = Depends(
 # ==============================================================================
 # 4. REMINDERS & COMPLIANCE
 # ==============================================================================
-@app.get("/reminders", tags=["Reminders"])
-async def list_reminders(current_user = Depends(get_current_user)):
-    pass
+@app.get(
+    "/reminders",
+    response_model=list[ReminderRead],
+    tags=["Reminders"],
+)
+def list_reminders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Reminder]:
+    reminder_query = select(Reminder).order_by(Reminder.due_date.asc())
+    if current_user.role != "advisor":
+        reminder_query = reminder_query.where(Reminder.user_id == current_user.id)
+    return list(db.scalars(reminder_query).all())
 
-@app.patch("/reminders/{reminder_id}", tags=["Reminders"])
-async def resolve_reminder(reminder_id: uuid.UUID, current_user = Depends(get_current_user)):
-    pass
 
-@app.get("/compliance/report", tags=["Compliance"])
-async def generate_compliance_report(current_user = Depends(get_current_user)):
-    pass
+@app.post(
+    "/reminders",
+    response_model=ReminderRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Reminders"],
+)
+def create_reminder(
+    payload: ReminderCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Reminder:
+    reminder = Reminder(user_id=current_user.id, **payload.model_dump())
+    db.add(reminder)
+    db.commit()
+    db.refresh(reminder)
+    return reminder
+
+
+@app.patch(
+    "/reminders/{reminder_id}",
+    response_model=ReminderRead,
+    tags=["Reminders"],
+)
+def resolve_reminder(
+    reminder_id: uuid.UUID,
+    payload: ReminderUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Reminder:
+    reminder_query = select(Reminder).where(Reminder.id == reminder_id)
+    if current_user.role != "advisor":
+        reminder_query = reminder_query.where(Reminder.user_id == current_user.id)
+    reminder = db.scalar(reminder_query)
+    if reminder is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found")
+
+    reminder.is_resolved = payload.is_resolved
+    db.commit()
+    db.refresh(reminder)
+    return reminder
+
+
+@app.delete(
+    "/reminders/{reminder_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Reminders"],
+)
+def delete_reminder(
+    reminder_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    reminder_query = select(Reminder).where(Reminder.id == reminder_id)
+    if current_user.role != "advisor":
+        reminder_query = reminder_query.where(Reminder.user_id == current_user.id)
+    reminder = db.scalar(reminder_query)
+    if reminder is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found")
+
+    db.delete(reminder)
+    db.commit()
+
+
+@app.get(
+    "/compliance/report",
+    response_model=ComplianceReportResponse,
+    tags=["Compliance"],
+)
+def generate_compliance_report(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ComplianceReportResponse:
+    if current_user.role != "advisor":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Advisor access required")
+
+    compliance_rows = db.execute(
+        text(
+            """
+            SELECT
+                u.id AS client_id,
+                CASE WHEN MAX(CASE
+                    WHEN a.agreement_type = 'fais_disclosure'
+                        AND a.signed_at IS NOT NULL THEN 1 ELSE 0 END) = 1
+                    THEN 'compliant' ELSE 'pending' END AS fais_disclosure_status,
+                CASE WHEN MAX(CASE
+                    WHEN a.agreement_type = 'fica'
+                        AND a.signed_at IS NOT NULL THEN 1 ELSE 0 END) = 1
+                    THEN 'compliant' ELSE 'pending' END AS fica_status,
+                CASE WHEN MAX(CASE
+                    WHEN a.agreement_type IN ('popia_consent', 'client_consent')
+                        AND a.signed_at IS NOT NULL THEN 1 ELSE 0 END) = 1
+                    THEN 'compliant' ELSE 'pending' END AS popia_consent_status
+            FROM users AS u
+            LEFT JOIN agreements AS a ON a.user_id = u.id
+            WHERE u.role = 'client'
+            GROUP BY u.id
+            ORDER BY u.id
+            """
+        )
+    ).mappings().all()
+
+    clients = [ComplianceClientStatus.model_validate(row) for row in compliance_rows]
+    return ComplianceReportResponse(clients=clients)
 
 # ==============================================================================
 # 5. GOALS & SERVICE REQUESTS
