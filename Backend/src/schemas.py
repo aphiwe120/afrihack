@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,6 +21,22 @@ class ComplianceStatus(str, Enum):
     COMPLIANT = "compliant"
     EXPIRED = "expired"
     NON_COMPLIANT = "non_compliant"
+
+
+class ServiceRequestType(str, Enum):
+    CHANGE_OF_ADDRESS = "change_of_address"
+    BANK_DETAILS = "bank_details"
+    BORDER_LETTER = "border_letter"
+    IRP5 = "irp5"
+    CONSULTATION = "consultation"
+    POLICY_DOCUMENT = "policy_document"
+
+
+class ServiceRequestStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
 
 
 class FinancialProductCreate(BaseModel):
@@ -115,3 +131,64 @@ class ComplianceClientStatus(BaseModel):
 
 class ComplianceReportResponse(BaseModel):
     clients: list[ComplianceClientStatus]
+
+
+class GoalCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=255)
+    target_amount: Decimal = Field(gt=0, decimal_places=2)
+    target_date: date
+    is_shared: bool = False
+    shared_with_user_ids: list[UUID] = Field(default_factory=list)
+
+
+class GoalUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    target_amount: Optional[Decimal] = Field(default=None, gt=0, decimal_places=2)
+    current_amount: Optional[Decimal] = Field(default=None, ge=0, decimal_places=2)
+    target_date: Optional[date] = None
+    is_shared: Optional[bool] = None
+    shared_with_user_ids: Optional[list[UUID]] = None
+
+
+class GoalRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    owner_id: UUID
+    title: str
+    target_amount: Decimal
+    current_amount: Decimal
+    target_date: date
+    is_shared: bool
+    shared_with_user_ids: list[UUID]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ServiceRequestCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_type: ServiceRequestType
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ServiceRequestUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: ServiceRequestStatus
+
+
+class ServiceRequestRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    request_type: ServiceRequestType
+    status: ServiceRequestStatus
+    payload: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime

@@ -3,10 +3,10 @@ from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional, List
 from sqlalchemy import (
-    String, Text, Boolean, Numeric, Date, DateTime, ForeignKey, func, ARRAY,
+    String, Text, Boolean, Numeric, Date, DateTime, ForeignKey, func,
     CheckConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, UUID, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -132,6 +132,13 @@ class Goal(Base):
 
 class ServiceRequest(Base):
     __tablename__ = "service_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "request_type IN ('change_of_address', 'bank_details', 'border_letter', "
+            "'irp5', 'consultation', 'policy_document')",
+            name="ck_service_requests_type",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

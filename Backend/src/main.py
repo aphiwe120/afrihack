@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from models import Claim, FinancialProduct, Reminder, User
+from models import Claim, FinancialProduct, Goal, Reminder, ServiceRequest, User
 from schemas import (
     AdvisorDashboardResponse,
     DashboardSummaryResponse,
@@ -17,6 +17,12 @@ from schemas import (
     ReminderCreate,
     ReminderRead,
     ReminderUpdate,
+    GoalCreate,
+    GoalRead,
+    GoalUpdate,
+    ServiceRequestCreate,
+    ServiceRequestRead,
+    ServiceRequestUpdate,
 )
 import uuid
 
@@ -360,13 +366,175 @@ def generate_compliance_report(
 # ==============================================================================
 # 5. GOALS & SERVICE REQUESTS
 # ==============================================================================
-@app.post("/goals", tags=["Goals"])
-async def create_goal(current_user = Depends(get_current_user)):
-    pass
+@app.get(
+    "/goals",
+    response_model=list[GoalRead],
+    tags=["Goals"],
+)
+def list_goals(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Goal]:
+    goal_query = select(Goal).where(
+        (Goal.owner_id == current_user.id)
+        | Goal.shared_with_user_ids.contains([current_user.id])
+    )
+    return list(db.scalars(goal_query.order_by(Goal.created_at.desc())).all())
 
-@app.post("/service-requests", tags=["Service Requests"])
-async def submit_service_request(current_user = Depends(get_current_user)):
-    pass
+
+@app.post(
+    "/goals",
+    response_model=GoalRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Goals"],
+)
+def create_goal(
+    payload: GoalCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Goal:
+    goal = Goal(owner_id=current_user.id, **payload.model_dump())
+    db.add(goal)
+    db.commit()
+    db.refresh(goal)
+    return goal
+
+
+@app.patch(
+    "/goals/{goal_id}",
+    response_model=GoalRead,
+    tags=["Goals"],
+)
+def update_goal(
+    goal_id: uuid.UUID,
+    payload: GoalUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Goal:
+    goal = db.scalar(
+        select(Goal).where(
+            Goal.id == goal_id,
+            (Goal.owner_id == current_user.id)
+            | Goal.shared_with_user_ids.contains([current_user.id]),
+        )
+    )
+    if goal is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(goal, field, value)
+    db.commit()
+    db.refresh(goal)
+    return goal
+
+
+@app.delete(
+    "/goals/{goal_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Goals"],
+)
+def delete_goal(
+    goal_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    goal = db.scalar(
+        select(Goal).where(
+            Goal.id == goal_id,
+            (Goal.owner_id == current_user.id)
+            | Goal.shared_with_user_ids.contains([current_user.id]),
+        )
+    )
+    if goal is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found")
+
+    db.delete(goal)
+    db.commit()
+
+
+@app.get(
+    "/service-requests",
+    response_model=list[ServiceRequestRead],
+    tags=["Service Requests"],
+)
+def list_service_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ServiceRequest]:
+    request_query = select(ServiceRequest).order_by(ServiceRequest.created_at.desc())
+    if current_user.role != "advisor":
+        request_query = request_query.where(ServiceRequest.user_id == current_user.id)
+    return list(db.scalars(request_query).all())
+
+
+@app.post(
+    "/service-requests",
+    response_model=ServiceRequestRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Service Requests"],
+)
+def submit_service_request(
+    payload: ServiceRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ServiceRequest:
+    request = ServiceRequest(
+        user_id=current_user.id,
+        request_type=payload.request_type.value,
+        payload=payload.payload,
+    )
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    return request
+
+
+@app.get(
+    "/service-requests/{request_id}",
+    response_model=ServiceRequestRead,
+    tags=["Service Requests"],
+)
+def get_service_request(
+    request_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ServiceRequest:
+    request_query = select(ServiceRequest).where(ServiceRequest.id == request_id)
+    if current_user.role != "advisor":
+        request_query = request_query.where(ServiceRequest.user_id == current_user.id)
+    request = db.scalar(request_query)
+    if request is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service request not found")
+    return request
+
+
+@app.patch(
+    "/service-requests/{request_id}",
+    response_model=ServiceRequestRead,
+    tags=["Service Requests"],
+)
+def update_service_request(
+    request_id: uuid.UUID,
+    payload: ServiceRequestUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ServiceRequest:
+    if current_user.role != "advisor":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only advisors may update service request status",
+        )
+
+    request = db.scalar(
+        select(ServiceRequest).where(ServiceRequest.id == request_id)
+    )
+    if request is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service request not found")
+
+    request.status = payload.status.value
+    db.commit()
+    db.refresh(request)
+    return request
 
 # ==============================================================================
 # 6. FNA & LEGAL AGREEMENTS
