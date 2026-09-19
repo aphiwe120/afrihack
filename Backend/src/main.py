@@ -1,5 +1,18 @@
+from decimal import Decimal
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from models import Claim, FinancialProduct, Reminder, User
+from schemas import (
+    AdvisorDashboardResponse,
+    DashboardSummaryResponse,
+    FinancialProductCreate,
+    FinancialProductRead,
+    FinancialProductUpdate,
+)
 import uuid
 
 # ==============================================================================
@@ -53,16 +66,149 @@ async def get_my_profile(current_user = Depends(get_current_user)):
 # 2. DASHBOARDS & ASSETS
 # ==============================================================================
 @app.get("/dashboard/summary", tags=["Dashboard"])
-async def client_dashboard_summary(current_user = Depends(get_current_user)):
-    pass
+def client_dashboard_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DashboardSummaryResponse:
+    total_assets = db.scalar(
+        select(func.coalesce(func.sum(FinancialProduct.current_value), 0)).where(
+            FinancialProduct.user_id == current_user.id
+        )
+    )
+    quick_action_count = db.scalar(
+        select(func.count(Reminder.id)).where(
+            Reminder.user_id == current_user.id,
+            Reminder.is_resolved.is_(False),
+        )
+    )
+    total_assets = Decimal(total_assets or 0)
+    total_liabilities = Decimal("0.00")
+
+    return DashboardSummaryResponse(
+        net_worth=total_assets - total_liabilities,
+        total_assets=total_assets,
+        total_liabilities=total_liabilities,
+        quick_action_count=quick_action_count or 0,
+    )
 
 @app.get("/advisor/dashboard", tags=["Advisor"])
-async def advisor_dashboard_summary(current_user = Depends(get_current_user)):
-    pass
+def advisor_dashboard_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AdvisorDashboardResponse:
+    if current_user.role != "advisor":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Advisor access required")
 
-@app.post("/assets", tags=["Assets"])
-async def register_asset(current_user = Depends(get_current_user)):
-    pass
+    total_clients = db.scalar(
+        select(func.count(User.id)).where(User.role == "client")
+    )
+    assets_under_advice = db.scalar(
+        select(func.coalesce(func.sum(FinancialProduct.current_value), 0))
+    )
+    active_claims = db.scalar(
+        select(func.count(Claim.id)).where(Claim.status != "closed")
+    )
+    overdue_compliance = db.scalar(
+        select(func.count(Reminder.id)).where(
+            Reminder.is_resolved.is_(False),
+            Reminder.due_date < func.now(),
+        )
+    )
+
+    return AdvisorDashboardResponse(
+        total_clients=total_clients or 0,
+        assets_under_advice=Decimal(assets_under_advice or 0),
+        active_claims=active_claims or 0,
+        overdue_compliance=overdue_compliance or 0,
+    )
+
+
+@app.get(
+    "/assets",
+    response_model=list[FinancialProductRead],
+    tags=["Assets"],
+)
+def list_assets(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[FinancialProduct]:
+    return list(
+        db.scalars(
+            select(FinancialProduct)
+            .where(FinancialProduct.user_id == current_user.id)
+            .order_by(FinancialProduct.created_at.desc())
+        ).all()
+    )
+
+
+@app.post(
+    "/assets",
+    response_model=FinancialProductRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Assets"],
+)
+def register_asset(
+    payload: FinancialProductCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FinancialProduct:
+    asset = FinancialProduct(user_id=current_user.id, **payload.model_dump())
+    db.add(asset)
+    db.commit()
+    db.refresh(asset)
+    return asset
+
+
+@app.get(
+    "/assets/{asset_id}",
+    response_model=FinancialProductRead,
+    tags=["Assets"],
+)
+def get_asset(
+    asset_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FinancialProduct:
+    asset = db.scalar(
+        select(FinancialProduct).where(
+            FinancialProduct.id == asset_id,
+            FinancialProduct.user_id == current_user.id,
+        )
+    )
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    return asset
+
+
+@app.patch(
+    "/assets/{asset_id}",
+    response_model=FinancialProductRead,
+    tags=["Assets"],
+)
+def update_asset(
+    asset_id: uuid.UUID,
+    payload: FinancialProductUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FinancialProduct:
+    if payload.current_value is not None and current_user.role != "advisor":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only advisors may update asset valuations",
+        )
+
+    asset_query = select(FinancialProduct).where(FinancialProduct.id == asset_id)
+    if current_user.role != "advisor":
+        asset_query = asset_query.where(FinancialProduct.user_id == current_user.id)
+    asset = db.scalar(asset_query)
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(asset, field, value)
+    db.commit()
+    db.refresh(asset)
+    return asset
 
 # ==============================================================================
 # 3. CLAIMS & INCIDENT WORKFLOW
