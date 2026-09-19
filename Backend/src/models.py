@@ -35,6 +35,8 @@ class User(Base):
     reminders: Mapped[List["Reminder"]] = relationship(foreign_keys="Reminder.user_id", back_populates="user", cascade="all, delete-orphan")
     goals: Mapped[List["Goal"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     service_requests: Mapped[List["ServiceRequest"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    fna_records: Mapped[List["FNA"]] = relationship(back_populates="client", cascade="all, delete-orphan")
+    agreements: Mapped[List["Agreement"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class FinancialProduct(Base):
@@ -149,3 +151,48 @@ class ServiceRequest(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     user: Mapped["User"] = relationship(back_populates="service_requests")
+
+
+class FNA(Base):
+    __tablename__ = "fna_records"
+    __table_args__ = (
+        CheckConstraint(
+            "risk_profile_tier IN ('cautious', 'moderate', 'assertive')",
+            name="ck_fna_records_risk_profile_tier",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    encrypted_fna_payload: Mapped[str] = mapped_column(Text, nullable=False)
+    encryption_iv: Mapped[str] = mapped_column(String(128), nullable=False)
+    risk_profile_tier: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    client: Mapped["User"] = relationship(back_populates="fna_records")
+
+
+class Agreement(Base):
+    __tablename__ = "agreements"
+    __table_args__ = (
+        CheckConstraint(
+            "document_type IN ('fais_disclosure', 'popia_consent', 'confidentiality')",
+            name="ck_agreements_document_type",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    document_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    signature_token: Mapped[str] = mapped_column(Text, nullable=False)
+    ip_address: Mapped[str] = mapped_column(String(45), nullable=False)
+    signed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(back_populates="agreements")

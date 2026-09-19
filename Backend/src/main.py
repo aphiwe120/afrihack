@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from models import Claim, FinancialProduct, Goal, Reminder, ServiceRequest, User
+from models import Agreement, Claim, FNA, FinancialProduct, Goal, Reminder, ServiceRequest, User
 from schemas import (
     AdvisorDashboardResponse,
     DashboardSummaryResponse,
@@ -23,6 +23,10 @@ from schemas import (
     ServiceRequestCreate,
     ServiceRequestRead,
     ServiceRequestUpdate,
+    AgreementCreate,
+    AgreementRead,
+    FNACreate,
+    FNARead,
 )
 import uuid
 
@@ -540,10 +544,89 @@ def update_service_request(
 # ==============================================================================
 # 6. FNA & LEGAL AGREEMENTS
 # ==============================================================================
-@app.post("/fna", tags=["FNA"])
-async def save_fna_data(current_user = Depends(get_current_user)):
-    pass
+@app.post(
+    "/fna",
+    response_model=FNARead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["FNA"],
+)
+def save_fna_data(
+    payload: FNACreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FNA:
+    if current_user.role != "advisor" and payload.client_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Clients may only submit their own FNA",
+        )
 
-@app.post("/agreements/sign", tags=["Agreements"])
-async def sign_legal_document(current_user = Depends(get_current_user)):
-    pass
+    fna = FNA(
+        client_id=payload.client_id,
+        encrypted_fna_payload=payload.encrypted_fna_payload,
+        encryption_iv=payload.encryption_iv,
+        risk_profile_tier=payload.risk_profile_tier.value,
+    )
+    db.add(fna)
+    db.commit()
+    db.refresh(fna)
+    return fna
+
+
+@app.get(
+    "/fna/{client_id}",
+    response_model=list[FNARead],
+    tags=["FNA"],
+)
+def get_fna_records(
+    client_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[FNA]:
+    if current_user.role != "advisor" and client_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="FNA access denied")
+
+    return list(
+        db.scalars(
+            select(FNA)
+            .where(FNA.client_id == client_id)
+            .order_by(FNA.created_at.desc())
+        ).all()
+    )
+
+@app.post(
+    "/agreements/sign",
+    response_model=AgreementRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Agreements"],
+)
+def sign_legal_document(
+    payload: AgreementCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Agreement:
+    agreement = Agreement(
+        user_id=current_user.id,
+        document_type=payload.document_type.value,
+        signature_token=payload.signature_token,
+        ip_address=str(payload.ip_address),
+    )
+    db.add(agreement)
+    db.commit()
+    db.refresh(agreement)
+    return agreement
+
+
+@app.get(
+    "/agreements",
+    response_model=list[AgreementRead],
+    tags=["Agreements"],
+)
+def list_agreements(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Agreement]:
+    agreement_query = select(Agreement).order_by(Agreement.signed_at.desc())
+    if current_user.role != "advisor":
+        agreement_query = agreement_query.where(Agreement.user_id == current_user.id)
+    return list(db.scalars(agreement_query).all())

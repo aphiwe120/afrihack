@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress
 
 
 class ReminderType(str, Enum):
@@ -37,6 +37,18 @@ class ServiceRequestStatus(str, Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class RiskProfileTier(str, Enum):
+    CAUTIOUS = "cautious"
+    MODERATE = "moderate"
+    ASSERTIVE = "assertive"
+
+
+class AgreementDocumentType(str, Enum):
+    FAIS_DISCLOSURE = "fais_disclosure"
+    POPIA_CONSENT = "popia_consent"
+    CONFIDENTIALITY = "confidentiality"
 
 
 class FinancialProductCreate(BaseModel):
@@ -192,3 +204,43 @@ class ServiceRequestRead(BaseModel):
     payload: dict[str, Any]
     created_at: datetime
     updated_at: datetime
+
+
+class FNACreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_id: UUID
+    encrypted_fna_payload: str = Field(min_length=1)
+    encryption_iv: str = Field(min_length=1, max_length=128)
+    risk_profile_tier: RiskProfileTier
+
+
+class FNARead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    client_id: UUID
+    encrypted_fna_payload: str
+    encryption_iv: str
+    risk_profile_tier: RiskProfileTier
+    created_at: datetime
+
+
+class AgreementCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_type: AgreementDocumentType
+    signature_token: str = Field(min_length=1)
+    ip_address: IPvAnyAddress
+
+
+class AgreementRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    document_type: AgreementDocumentType
+    signature_token: str
+    ip_address: IPvAnyAddress
+    signed_at: datetime
+    created_at: datetime
