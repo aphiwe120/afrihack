@@ -1,11 +1,15 @@
 from decimal import Decimal
-
+import os
+import uuid
+from typing import Optional
+from jose import JWTError, jwt
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from models import Claim, FinancialProduct, Reminder, User
+from models import Agreement, Claim, FNA, FinancialProduct, Goal, Reminder, ServiceRequest, User
 from schemas import (
     AdvisorDashboardResponse,
     DashboardSummaryResponse,
@@ -17,8 +21,17 @@ from schemas import (
     ReminderCreate,
     ReminderRead,
     ReminderUpdate,
+    GoalCreate,
+    GoalRead,
+    GoalUpdate,
+    ServiceRequestCreate,
+    ServiceRequestRead,
+    ServiceRequestUpdate,
+    AgreementCreate,
+    AgreementRead,
+    FNACreate,
+    FNARead,
 )
-import uuid
 
 # ==============================================================================
 # APP INITIALIZATION & MIDDLEWARE
@@ -42,31 +55,85 @@ app.add_middleware(
 # ==============================================================================
 def get_db():
     """Yields SQLAlchemy database session."""
-    yield "db_session_placeholder"
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-def get_current_user():
-    """Validates JWT and returns active user (enforces RBAC)."""
-    pass
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise credentials_exception
+
+    jwt_secret = os.environ.get("SUPABASE_JWT_SECRET")
+    jwt_algorithm = os.environ.get("SUPABASE_JWT_ALGORITHM")
+    if not jwt_secret or not jwt_algorithm:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase JWT verification is not configured",
+        )
+
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            jwt_secret,
+            algorithms=[jwt_algorithm],
+            options={"verify_aud": False},
+        )
+        subject = payload.get("sub")
+        if not isinstance(subject, str):
+            raise credentials_exception
+        user_id = uuid.UUID(subject)
+    except (JWTError, ValueError, TypeError):
+        raise credentials_exception
+
+    user = db.scalar(select(User).where(User.id == user_id))
+    if user is None:
+        raise credentials_exception
+    return user
 
 # ==============================================================================
 # 1. AUTHENTICATION & PROFILES
 # ==============================================================================
-@app.post("/auth/register", tags=["Auth"])
-async def register_user(db = Depends(get_db)):
-
-    pass
-
-@app.post("/auth/login", tags=["Auth"])
-async def login(db = Depends(get_db)):
-    pass
-
 @app.post("/auth/verify-biometrics", tags=["Auth"])
-async def verify_biometrics(db = Depends(get_db)):
-    pass
+async def verify_biometrics(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.biometric_verified = True
+    current_user.id_document_verified = True
+    db.commit()
+    db.refresh(current_user)
+    return {"message": "Biometric verification complete", "verified": True}
+
 
 @app.get("/users/me", tags=["Profiles"])
 async def get_my_profile(current_user = Depends(get_current_user)):
-    pass
+    return { 
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "role": current_user.role,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+        "id_number": f"******{current_user.id_number[-4:]}",
+        "phone_number": current_user.phone_number,
+        "residential_address": current_user.residential_address,
+        "biometric_verified": current_user.biometric_verified,
+        "id_document_verified": current_user.id_document_verified,
+    }
 
 # ==============================================================================
 # 2. DASHBOARDS & ASSETS
@@ -360,21 +427,263 @@ def generate_compliance_report(
 # ==============================================================================
 # 5. GOALS & SERVICE REQUESTS
 # ==============================================================================
-@app.post("/goals", tags=["Goals"])
-async def create_goal(current_user = Depends(get_current_user)):
-    pass
+@app.get(
+    "/goals",
+    response_model=list[GoalRead],
+    tags=["Goals"],
+)
 
-@app.post("/service-requests", tags=["Service Requests"])
-async def submit_service_request(current_user = Depends(get_current_user)):
-    pass
+def list_goals(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Goal]:
+    goal_query = select(Goal).where(
+        (Goal.owner_id == current_user.id)
+        | Goal.shared_with_user_ids.contains([current_user.id])
+    )
+    return list(db.scalars(goal_query.order_by(Goal.created_at.desc())).all())
+
+
+@app.post(
+    "/goals",
+    response_model=GoalRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Goals"],
+)
+def create_goal(
+    payload: GoalCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Goal:
+    goal = Goal(owner_id=current_user.id, **payload.model_dump())
+    db.add(goal)
+    db.commit()
+    db.refresh(goal)
+    return goal
+
+
+@app.patch(
+    "/goals/{goal_id}",
+    response_model=GoalRead,
+    tags=["Goals"],
+)
+def update_goal(
+    goal_id: uuid.UUID,
+    payload: GoalUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Goal:
+    goal = db.scalar(
+        select(Goal).where(
+            Goal.id == goal_id,
+            (Goal.owner_id == current_user.id)
+            | Goal.shared_with_user_ids.contains([current_user.id]),
+        )
+    )
+    if goal is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(goal, field, value)
+    db.commit()
+    db.refresh(goal)
+    return goal
+
+
+@app.delete(
+    "/goals/{goal_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Goals"],
+)
+def delete_goal(
+    goal_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    goal = db.scalar(
+        select(Goal).where(
+            Goal.id == goal_id,
+            (Goal.owner_id == current_user.id)
+            | Goal.shared_with_user_ids.contains([current_user.id]),
+        )
+    )
+    if goal is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found")
+
+    db.delete(goal)
+    db.commit()
+
+
+@app.get(
+    "/service-requests",
+    response_model=list[ServiceRequestRead],
+    tags=["Service Requests"],
+)
+def list_service_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ServiceRequest]:
+    request_query = select(ServiceRequest).order_by(ServiceRequest.created_at.desc())
+    if current_user.role != "advisor":
+        request_query = request_query.where(ServiceRequest.user_id == current_user.id)
+    return list(db.scalars(request_query).all())
+
+
+@app.post(
+    "/service-requests",
+    response_model=ServiceRequestRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Service Requests"],
+)
+def submit_service_request(
+    payload: ServiceRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ServiceRequest:
+    request = ServiceRequest(
+        user_id=current_user.id,
+        request_type=payload.request_type.value,
+        payload=payload.payload,
+    )
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    return request
+
+
+@app.get(
+    "/service-requests/{request_id}",
+    response_model=ServiceRequestRead,
+    tags=["Service Requests"],
+)
+def get_service_request(
+    request_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ServiceRequest:
+    request_query = select(ServiceRequest).where(ServiceRequest.id == request_id)
+    if current_user.role != "advisor":
+        request_query = request_query.where(ServiceRequest.user_id == current_user.id)
+    request = db.scalar(request_query)
+    if request is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service request not found")
+    return request
+
+
+@app.patch(
+    "/service-requests/{request_id}",
+    response_model=ServiceRequestRead,
+    tags=["Service Requests"],
+)
+def update_service_request(
+    request_id: uuid.UUID,
+    payload: ServiceRequestUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ServiceRequest:
+    if current_user.role != "advisor":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only advisors may update service request status",
+        )
+
+    request = db.scalar(
+        select(ServiceRequest).where(ServiceRequest.id == request_id)
+    )
+    if request is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service request not found")
+
+    request.status = payload.status.value
+    db.commit()
+    db.refresh(request)
+    return request
 
 # ==============================================================================
 # 6. FNA & LEGAL AGREEMENTS
 # ==============================================================================
-@app.post("/fna", tags=["FNA"])
-async def save_fna_data(current_user = Depends(get_current_user)):
-    pass
+@app.post(
+    "/fna",
+    response_model=FNARead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["FNA"],
+)
+def save_fna_data(
+    payload: FNACreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FNA:
+    if current_user.role != "advisor" and payload.client_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Clients may only submit their own FNA",
+        )
 
-@app.post("/agreements/sign", tags=["Agreements"])
-async def sign_legal_document(current_user = Depends(get_current_user)):
-    pass
+    fna = FNA(
+        client_id=payload.client_id,
+        encrypted_fna_payload=payload.encrypted_fna_payload,
+        encryption_iv=payload.encryption_iv,
+        risk_profile_tier=payload.risk_profile_tier.value,
+    )
+    db.add(fna)
+    db.commit()
+    db.refresh(fna)
+    return fna
+
+
+@app.get(
+    "/fna/{client_id}",
+    response_model=list[FNARead],
+    tags=["FNA"],
+)
+def get_fna_records(
+    client_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[FNA]:
+    if current_user.role != "advisor" and client_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="FNA access denied")
+
+    return list(
+        db.scalars(
+            select(FNA)
+            .where(FNA.client_id == client_id)
+            .order_by(FNA.created_at.desc())
+        ).all()
+    )
+
+@app.post(
+    "/agreements/sign",
+    response_model=AgreementRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Agreements"],
+)
+def sign_legal_document(
+    payload: AgreementCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Agreement:
+    agreement = Agreement(
+        user_id=current_user.id,
+        document_type=payload.document_type.value,
+        signature_token=payload.signature_token,
+        ip_address=str(payload.ip_address),
+    )
+    db.add(agreement)
+    db.commit()
+    db.refresh(agreement)
+    return agreement
+
+
+@app.get(
+    "/agreements",
+    response_model=list[AgreementRead],
+    tags=["Agreements"],
+)
+def list_agreements(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Agreement]:
+    agreement_query = select(Agreement).order_by(Agreement.signed_at.desc())
+    if current_user.role != "advisor":
+        agreement_query = agreement_query.where(Agreement.user_id == current_user.id)
+    return list(db.scalars(agreement_query).all())

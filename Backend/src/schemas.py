@@ -1,10 +1,10 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress
 
 
 class ReminderType(str, Enum):
@@ -21,6 +21,34 @@ class ComplianceStatus(str, Enum):
     COMPLIANT = "compliant"
     EXPIRED = "expired"
     NON_COMPLIANT = "non_compliant"
+
+
+class ServiceRequestType(str, Enum):
+    CHANGE_OF_ADDRESS = "change_of_address"
+    BANK_DETAILS = "bank_details"
+    BORDER_LETTER = "border_letter"
+    IRP5 = "irp5"
+    CONSULTATION = "consultation"
+    POLICY_DOCUMENT = "policy_document"
+
+
+class ServiceRequestStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class RiskProfileTier(str, Enum):
+    CAUTIOUS = "cautious"
+    MODERATE = "moderate"
+    ASSERTIVE = "assertive"
+
+
+class AgreementDocumentType(str, Enum):
+    FAIS_DISCLOSURE = "fais_disclosure"
+    POPIA_CONSENT = "popia_consent"
+    CONFIDENTIALITY = "confidentiality"
 
 
 class FinancialProductCreate(BaseModel):
@@ -115,3 +143,104 @@ class ComplianceClientStatus(BaseModel):
 
 class ComplianceReportResponse(BaseModel):
     clients: list[ComplianceClientStatus]
+
+
+class GoalCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=255)
+    target_amount: Decimal = Field(gt=0, decimal_places=2)
+    target_date: date
+    is_shared: bool = False
+    shared_with_user_ids: list[UUID] = Field(default_factory=list)
+
+
+class GoalUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    target_amount: Optional[Decimal] = Field(default=None, gt=0, decimal_places=2)
+    current_amount: Optional[Decimal] = Field(default=None, ge=0, decimal_places=2)
+    target_date: Optional[date] = None
+    is_shared: Optional[bool] = None
+    shared_with_user_ids: Optional[list[UUID]] = None
+
+
+class GoalRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    owner_id: UUID
+    title: str
+    target_amount: Decimal
+    current_amount: Decimal
+    target_date: date
+    is_shared: bool
+    shared_with_user_ids: list[UUID]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ServiceRequestCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_type: ServiceRequestType
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ServiceRequestUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: ServiceRequestStatus
+
+
+class ServiceRequestRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    request_type: ServiceRequestType
+    status: ServiceRequestStatus
+    payload: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
+class FNACreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_id: UUID
+    encrypted_fna_payload: str = Field(min_length=1)
+    encryption_iv: str = Field(min_length=1, max_length=128)
+    risk_profile_tier: RiskProfileTier
+
+
+class FNARead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    client_id: UUID
+    encrypted_fna_payload: str
+    encryption_iv: str
+    risk_profile_tier: RiskProfileTier
+    created_at: datetime
+
+
+class AgreementCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_type: AgreementDocumentType
+    signature_token: str = Field(min_length=1)
+    ip_address: IPvAnyAddress
+
+
+class AgreementRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    document_type: AgreementDocumentType
+    signature_token: str
+    ip_address: IPvAnyAddress
+    signed_at: datetime
+    created_at: datetime
