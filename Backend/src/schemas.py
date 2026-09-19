@@ -1,9 +1,26 @@
 from datetime import date, datetime
 from decimal import Decimal
+from enum import Enum
 from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class ReminderType(str, Enum):
+    DRIVING_LICENCE_EXPIRY = "driving_licence_expiry"
+    POLICE_REPORT = "police_report"
+    VALUATION_DUE = "valuation_due"
+    ANNUAL_REVIEW = "annual_review"
+    BIRTHDAY = "birthday"
+    CUSTOM = "custom"
+
+
+class ComplianceStatus(str, Enum):
+    PENDING = "pending"
+    COMPLIANT = "compliant"
+    EXPIRED = "expired"
+    NON_COMPLIANT = "non_compliant"
 
 
 class FinancialProductCreate(BaseModel):
@@ -56,3 +73,45 @@ class AdvisorDashboardResponse(BaseModel):
     assets_under_advice: Decimal
     active_claims: int = Field(ge=0)
     overdue_compliance: int = Field(ge=0)
+
+
+class ReminderCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: ReminderType
+    title: str = Field(min_length=1, max_length=255)
+    due_date: datetime
+    target_audience: str = Field(min_length=1, max_length=20)
+    advisor_id: Optional[UUID] = None
+
+
+class ReminderUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_resolved: bool
+
+
+class ReminderRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    advisor_id: Optional[UUID]
+    type: ReminderType
+    title: str
+    due_date: datetime
+    target_audience: str
+    is_resolved: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ComplianceClientStatus(BaseModel):
+    client_id: UUID
+    fais_disclosure_status: ComplianceStatus
+    fica_status: ComplianceStatus
+    popia_consent_status: ComplianceStatus
+
+
+class ComplianceReportResponse(BaseModel):
+    clients: list[ComplianceClientStatus]

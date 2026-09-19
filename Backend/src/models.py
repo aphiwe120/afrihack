@@ -3,7 +3,8 @@ from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional, List
 from sqlalchemy import (
-    String, Text, Boolean, Numeric, Date, DateTime, ForeignKey, func, ARRAY
+    String, Text, Boolean, Numeric, Date, DateTime, ForeignKey, func, ARRAY,
+    CheckConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -90,6 +91,13 @@ class ClaimEvidence(Base):
 
 class Reminder(Base):
     __tablename__ = "reminders"
+    __table_args__ = (
+        CheckConstraint(
+            "type IN ('driving_licence_expiry', 'police_report', 'valuation_due', "
+            "'annual_review', 'birthday', 'custom')",
+            name="ck_reminders_type",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
