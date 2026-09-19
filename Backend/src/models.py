@@ -44,7 +44,7 @@ class FinancialProduct(Base):
     provider_name: Mapped[str] = mapped_column(String(100), nullable=False)
     policy_number: Mapped[str] = mapped_column(String(100), nullable=False)
     product_category: Mapped[str] = mapped_column(String(50), nullable=False)
-    current_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0.00)
+    current_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"))
     valuation_renewal_date: Mapped[Optional[date]] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
