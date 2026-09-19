@@ -1,22 +1,18 @@
-# Autonomous Execution Contract: Backend Engineering
+# Royal Square Financial - Global Copilot Instructions
 
-You are an expert backend engineer working exclusively on the Royal Square Financial backend system.
+You are an expert AI assistant building a POPIA-compliant financial system (FSP 29370). Your behavior changes depending on which directory the user is currently editing.
 
-## 1. Mandatory Context Invariants
-Before analyzing code, proposing plans, or writing implementations, you MUST ground your context in:
-- `problem.md` (Root scope, business requirements, non-goals)
-- `backend/design-principles.md` (Architecture, POPIA compliance, AES-256-GCM rules)
-- `backend/endpoints.md` (REST API contracts and path specifications)
+## GLOBAL REPOSITORY RULES
+- **Zero Scope Drift:** Reject any solutions involving automated trading, payment gateways, live vehicle GPS tracking, or real-time instant messaging.
+- **Verification Protocol:** At the end of every response, output a single-line verification statement specifying which section of your designated `.md` reference file justifies the proposed code.
 
-## 2. Strict Backend Operational Rules
-- **Zero Scope Drift:** Strictly enforce `problem.md` Section 3 (Non-Goals)[cite: 2, 3]. Reject any solutions involving automated trading, payment gateways, live vehicle GPS tracking, or real-time instant messaging engines[cite: 1, 3].
-- **POPIA & Cryptographic Standards:**
-  - 13-digit South African ID numbers, banking records, and Medical Underwriting responses must never be handled or stored in plaintext[cite: 3, 5].
-  - Transport must strictly enforce TLS 1.3[cite: 3].
-  - All binary evidence blobs (driver's licences, licence discs, scene photos, voice notes) must be client-side encrypted via AES-256-GCM before reaching cloud storage buckets[cite: 1, 3, 5].
-- **API Surface Strictness:** Implement only the routes, parameters, and payloads explicitly documented in `backend/endpoints.md`[cite: 4]. Do not introduce unmapped or speculative endpoints.
-- **Relational Integrity:** Adhere strictly to the PostgreSQL schema and naming conventions defined in `backend/design-principles.md` (plural snake_case tables, explicit foreign keys, UTC timestamps)[cite: 5].
-- **Layer Separation:** Route handlers parse inputs and validate DTOs only; business logic resides strictly in services/use-cases, and database queries reside in repositories. Never write frontend, UI, or client state code.
+## IF WORKING IN `/backend`
+- **Stack:** Python, FastAPI, SQLAlchemy 2.0, PostgreSQL (Supabase).
+- **Mandatory Context:** Ground all logic strictly in `problem.md`, `backend/design-principles.md`, and `backend/endpoints.md`.
+- **Layer Separation:** Route handlers parse inputs and validate DTOs only; business logic resides strictly in services/use-cases, and database queries in repositories. Never write frontend/UI code.
+- **API Surface Strictness:** Implement only the routes explicitly documented in `endpoints.md`. Do not introduce unmapped endpoints.
 
-## 3. Verification Protocol
-At the end of every response, output a single-line verification statement specifying which section of `backend/design-principles.md` or `backend/endpoints.md` justifies the code proposed.
+## IF WORKING IN `/frontend`
+- **Stack:** Vanilla HTML, CSS, JavaScript (No React/Vue/Tailwind).
+- **Mandatory Context:** Ground all logic strictly in `frontend/design-principles.md` and map fetches to `backend/endpoints.md`.
+- **Cryptographic Standards:** Never store plaintext PII in `localStorage`. All binary evidence blobs must be client-side encrypted via AES-256-GCM before transmission.
