@@ -1,14 +1,16 @@
 from decimal import Decimal
+from typing import Optional
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from pydantic import BaseModel, EmailStr
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from models import Claim, FinancialProduct, Goal, Reminder, ServiceRequest, User
+from models import Agreement, Claim, FNA, FinancialProduct, Goal, Reminder, ServiceRequest, User
 from schemas import (
     AdvisorDashboardResponse,
     DashboardSummaryResponse,
@@ -32,6 +34,11 @@ from schemas import (
     FNARead,
 )
 import uuid
+
+SECRET_KEY = "development-only-secret"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ==============================================================================
 # APP INITIALIZATION & MIDDLEWARE
@@ -86,7 +93,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get
 # ==============================================================================
 # 1. AUTHENTICATION & PROFILES
 # ==============================================================================
-  class RegisterSchema(BaseModel):
+class RegisterSchema(BaseModel):
     email: EmailStr
     password: str
     role: str
