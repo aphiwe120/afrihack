@@ -371,6 +371,7 @@ def generate_compliance_report(
     response_model=list[GoalRead],
     tags=["Goals"],
 )
+
 def list_goals(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
