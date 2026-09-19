@@ -1,12 +1,11 @@
 from decimal import Decimal
+import os
+import uuid
 from typing import Optional
-from passlib.context import CryptContext
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -33,12 +32,6 @@ from schemas import (
     FNACreate,
     FNARead,
 )
-import uuid
-
-SECRET_KEY = "development-only-secret"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ==============================================================================
 # APP INITIALIZATION & MIDDLEWARE
@@ -70,22 +63,44 @@ def get_db():
         db.close()
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+bearer_scheme = HTTPBearer(auto_error=False)
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)):
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
     )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-    except JWTError:
+    if credentials is None or credentials.scheme.lower() != "bearer":
         raise credentials_exception
 
-    user = db.query(User).filter(User.id == user_id).first()
+    jwt_secret = os.environ.get("SUPABASE_JWT_SECRET")
+    jwt_algorithm = os.environ.get("SUPABASE_JWT_ALGORITHM")
+    if not jwt_secret or not jwt_algorithm:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase JWT verification is not configured",
+        )
+
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            jwt_secret,
+            algorithms=[jwt_algorithm],
+            options={"verify_aud": False},
+        )
+        subject = payload.get("sub")
+        if not isinstance(subject, str):
+            raise credentials_exception
+        user_id = uuid.UUID(subject)
+    except (JWTError, ValueError, TypeError):
+        raise credentials_exception
+
+    user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
         raise credentials_exception
     return user
@@ -93,75 +108,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get
 # ==============================================================================
 # 1. AUTHENTICATION & PROFILES
 # ==============================================================================
-class RegisterSchema(BaseModel):
-    email: EmailStr
-    password: str
-    role: str
-    first_name: str
-    last_name: str
-    id_number: str
-    phone_number: str
-    residential_address: Optional[str] = None
-
-
-class LoginSchema(BaseModel):
-    email: EmailStr
-    password: str
-
-
-@app.post("/auth/register", tags=["Auth"])
-async def register_user(payload: RegisterSchema, db = Depends(get_db)):
-    existing = db.query(User).filter(User.email == payload.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    if payload.role not in ("client", "advisor"):
-        raise HTTPException(status_code=400, detail="Role must be client or advisor")
-
-    new_user = User(
-        email=payload.email,
-        password_hash=pwd_context.hash(payload.password),
-        role=payload.role,
-        first_name=payload.first_name,
-        last_name=payload.last_name,
-        id_number=payload.id_number,
-        phone_number=payload.phone_number,
-        residential_address=payload.residential_address,
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    return {
-        "message": "User registered successfully",
-        "user_id": str(new_user.id),
-        "role": new_user.role,
-    }
-
-
-@app.post("/auth/login", tags=["Auth"])
-async def login(payload: LoginSchema, db = Depends(get_db)):
-    user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not pwd_context.verify(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = jwt.encode(
-        {"sub": str(user.id), "role": user.role, "exp": expire},
-        SECRET_KEY,
-        algorithm=ALGORITHM,
-    )
-
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user_id": str(user.id),
-        "role": user.role,
-    }
-
-
 @app.post("/auth/verify-biometrics", tags=["Auth"])
-async def verify_biometrics(current_user = Depends(get_current_user), db = Depends(get_db)):
+async def verify_biometrics(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     current_user.biometric_verified = True
     current_user.id_document_verified = True
     db.commit()
@@ -177,7 +128,7 @@ async def get_my_profile(current_user = Depends(get_current_user)):
         "role": current_user.role,
         "first_name": current_user.first_name,
         "last_name": current_user.last_name,
-        "id_number": current_user.id_number,
+        "id_number": f"******{current_user.id_number[-4:]}",
         "phone_number": current_user.phone_number,
         "residential_address": current_user.residential_address,
         "biometric_verified": current_user.biometric_verified,
