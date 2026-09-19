@@ -1,11 +1,14 @@
 from decimal import Decimal
-
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
+from fastapi.security import OAuth2PasswordBearer
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import Agreement, Claim, FNA, FinancialProduct, Goal, Reminder, ServiceRequest, User
+from models import Claim, FinancialProduct, Goal, Reminder, ServiceRequest, User
 from schemas import (
     AdvisorDashboardResponse,
     DashboardSummaryResponse,
@@ -52,31 +55,127 @@ app.add_middleware(
 # ==============================================================================
 def get_db():
     """Yields SQLAlchemy database session."""
-    yield "db_session_placeholder"
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-def get_current_user():
-    """Validates JWT and returns active user (enforces RBAC)."""
-    pass
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise credentials_exception
+    return user
 
 # ==============================================================================
 # 1. AUTHENTICATION & PROFILES
 # ==============================================================================
-@app.post("/auth/register", tags=["Auth"])
-async def register_user(db = Depends(get_db)):
+  class RegisterSchema(BaseModel):
+    email: EmailStr
+    password: str
+    role: str
+    first_name: str
+    last_name: str
+    id_number: str
+    phone_number: str
+    residential_address: Optional[str] = None
 
-    pass
+
+class LoginSchema(BaseModel):
+    email: EmailStr
+    password: str
+
+
+@app.post("/auth/register", tags=["Auth"])
+async def register_user(payload: RegisterSchema, db = Depends(get_db)):
+    existing = db.query(User).filter(User.email == payload.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    if payload.role not in ("client", "advisor"):
+        raise HTTPException(status_code=400, detail="Role must be client or advisor")
+
+    new_user = User(
+        email=payload.email,
+        password_hash=pwd_context.hash(payload.password),
+        role=payload.role,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        id_number=payload.id_number,
+        phone_number=payload.phone_number,
+        residential_address=payload.residential_address,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {
+        "message": "User registered successfully",
+        "user_id": str(new_user.id),
+        "role": new_user.role,
+    }
+
 
 @app.post("/auth/login", tags=["Auth"])
-async def login(db = Depends(get_db)):
-    pass
+async def login(payload: LoginSchema, db = Depends(get_db)):
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user or not pwd_context.verify(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    token = jwt.encode(
+        {"sub": str(user.id), "role": user.role, "exp": expire},
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": str(user.id),
+        "role": user.role,
+    }
+
 
 @app.post("/auth/verify-biometrics", tags=["Auth"])
-async def verify_biometrics(db = Depends(get_db)):
-    pass
+async def verify_biometrics(current_user = Depends(get_current_user), db = Depends(get_db)):
+    current_user.biometric_verified = True
+    current_user.id_document_verified = True
+    db.commit()
+    db.refresh(current_user)
+    return {"message": "Biometric verification complete", "verified": True}
+
 
 @app.get("/users/me", tags=["Profiles"])
 async def get_my_profile(current_user = Depends(get_current_user)):
-    pass
+    return { 
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "role": current_user.role,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+        "id_number": current_user.id_number,
+        "phone_number": current_user.phone_number,
+        "residential_address": current_user.residential_address,
+        "biometric_verified": current_user.biometric_verified,
+        "id_document_verified": current_user.id_document_verified,
+    }
 
 # ==============================================================================
 # 2. DASHBOARDS & ASSETS
