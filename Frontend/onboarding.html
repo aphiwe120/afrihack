@@ -11,14 +11,32 @@
     <section class="onboarding-card bg-white rounded-xl shadow-lg p-8" aria-labelledby="onboardingTitle">
       <p class="eyebrow">Royal Square Financial</p>
       <h1 id="onboardingTitle">Complete your setup</h1>
-      <p class="intro">Securely complete your onboarding in two simple steps.</p>
+      <p class="intro">Securely complete your Smart Compliance onboarding.</p>
+
+      <nav class="progress-indicator" aria-label="Onboarding progress">
+        <span class="progress-step active" id="progressStep1">Step 1: FICA Identity</span>
+        <span class="progress-step" id="progressStep2">Step 2: FAIS Profiling</span>
+        <span class="progress-step" id="progressStep3">Step 3: Legal Consent</span>
+      </nav>
 
       <div id="step1Container" class="step-card">
         <span class="step-label">Step 1</span>
-        <h2>Identity Verification</h2>
+        <h2>FICA identity verification</h2>
         <label for="idNumber">South African ID number</label>
         <input type="text" id="idNumber" placeholder="13-digit SA ID" maxlength="13" inputmode="numeric" pattern="[0-9]{13}" />
-        <button class="primary-button" id="verifyBtn" type="button">Verify ID</button>
+        <button class="primary-button" id="verifyBtn" type="button">Verify ID via ThisIsMe</button>
+        <div class="upload-grid">
+          <label class="upload-zone" for="proofOfAddress">
+            <span>Upload Proof of Address</span>
+            <small>&lt; 3 months</small>
+            <input type="file" id="proofOfAddress" accept=".pdf,image/*" />
+          </label>
+          <label class="upload-zone" for="sarsTaxDocument">
+            <span>Upload SARS Tax Document</span>
+            <small>PDF or image</small>
+            <input type="file" id="sarsTaxDocument" accept=".pdf,image/*" />
+          </label>
+        </div>
         <div id="dhaLoading" style="display: none;" class="loading-state" role="status" aria-live="polite">
           <span class="spinner" aria-hidden="true"></span>
           <span>Verifying FICA details with Department of Home Affairs via ThisIsMe...</span>
@@ -27,9 +45,46 @@
 
       <div id="step2Container" style="display: none;" class="step-card">
         <span class="step-label">Step 2</span>
-        <h2>Automated Financial Summary</h2>
-        <p>Review a POPIA-compliant transaction analysis to help prepare your secure financial summary.</p>
+        <h2>FAIS advisory profile</h2>
+        <p>Securely connect your financial information, then tell us what you want to achieve.</p>
         <button class="primary-button" id="consentBtn" type="button">Grant Secure Consent via Stitch</button>
+        <div class="fais-requirements">
+          <h3>FAIS Requirements</h3>
+          <label for="financialGoals">Financial Goals</label>
+          <select id="financialGoals" required>
+            <option value="">Select a goal</option>
+            <option>Wealth Creation</option>
+            <option>Retirement</option>
+            <option>Education</option>
+          </select>
+          <label for="riskProfile">Risk Profile</label>
+          <select id="riskProfile" required>
+            <option>Conservative</option>
+            <option>Moderate</option>
+            <option>Aggressive</option>
+          </select>
+        </div>
+        <button class="primary-button" id="saveProfileBtn" type="button">Save Profile &amp; Generate Advice</button>
+      </div>
+
+      <div id="step3Container" style="display: none;" class="step-card">
+        <span class="step-label">Step 3</span>
+        <h2>Legal and consent</h2>
+        <div class="legal-copy max-h-40 overflow-y-auto text-sm" tabindex="0">
+          <h3>FAIS Disclosure Letter</h3>
+          <p>Royal Square Financial is a licensed financial services provider. Fees, commissions, and any other remuneration applicable to your advice or products will be disclosed before implementation. We will confirm whether the relevant advice is provided on a tied or independent basis.</p>
+          <p>To raise a complaint, contact our complaints desk through the channels provided by your advisor. We will acknowledge and investigate your complaint fairly and explain the escalation process if it is not resolved to your satisfaction.</p>
+          <h3>POPIA Privacy Notice</h3>
+          <p>We collect and process your identity, financial, and contact information to provide advice, meet legal and regulatory obligations, and protect our services. We share information only with authorised service providers, product suppliers, and regulators where necessary and lawful.</p>
+          <p>You may request access to, correction of, or deletion of your personal information, object to certain processing, or withdraw consent where applicable. Requests can be made through your Royal Square Financial advisor.</p>
+        </div>
+        <label class="consent-check" for="legalConsent">
+          <input type="checkbox" id="legalConsent" />
+          <span>I confirm my information is accurate and I accept the FAIS Disclosure and POPIA Privacy policies.</span>
+        </label>
+        <label for="digitalSignature">Digital signature</label>
+        <input type="text" id="digitalSignature" placeholder="Type full name to digitally sign" autocomplete="name" />
+        <button class="primary-button" id="finalizeBtn" type="button" disabled>Finalize onboarding</button>
       </div>
     </section>
   </main>

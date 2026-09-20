@@ -29,6 +29,18 @@
         <span class="fica-badge"><span aria-hidden="true">✓</span> FICA Verified</span>
       </header>
 
+      <section class="advice-record bg-white border-l-4 border-blue-600 rounded-xl shadow-sm p-6 mb-6" aria-labelledby="adviceRecordTitle">
+        <div class="advice-record-header">
+          <h2 id="adviceRecordTitle">Official FAIS Recommendation Record</h2>
+          <span id="currentDate"></span>
+        </div>
+        <div class="advice-summary bg-slate-50 p-4 rounded-md mt-4">
+          <h3>Advice Summary</h3>
+          <p>Based on your aggressive risk profile and wealth creation goals, we recommend allocating 60% to offshore equities and 40% to local fixed-income funds.</p>
+        </div>
+        <span class="consent-badge bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold mt-4 inline-block">POPIA &amp; FAIS Consent Digitally Signed.</span>
+      </section>
+
       <section class="summary-grid" aria-label="Financial summary">
         <article class="dashboard-card bg-white rounded-xl shadow-sm p-6">
           <p class="card-label">Net Worth</p>
@@ -53,8 +65,25 @@
           <p class="upload-status" id="uploadStatus" role="status" aria-live="polite"></p>
         </article>
       </section>
+
+      <section class="dashboard-grid grid-cols-1 md:grid-cols-2 gap-6 mb-6" aria-label="Goals and reminders">
+        <article class="goals-card bg-white rounded-xl p-6 shadow-sm">
+          <h2>Wealth Creation Goals</h2>
+          <ul id="goalsList" class="goals-list"></ul>
+          <button id="addGoalBtn" class="primary-button" type="button">+ Add New Goal</button>
+        </article>
+
+        <article class="reminders-card bg-white rounded-xl p-6 shadow-sm border-t-4 border-purple-600" id="compliance">
+          <div class="reminders-heading">
+            <h2>Advisor &amp; Compliance Reminders</h2>
+            <span class="notification-badge bg-red-100 text-red-800 rounded-full px-2" aria-label="2 reminders">2</span>
+          </div>
+          <ul id="remindersList" class="reminders-list"></ul>
+        </article>
+      </section>
     </main>
   </div>
   <script src="js/dashboard.js"></script>
+  <script src="js/demo-switcher.js"></script>
 </body>
 </html>

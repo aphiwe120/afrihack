@@ -1,3 +1,11 @@
+const isVerified = localStorage.getItem('demo_onboarding_complete');
+
+if (isVerified === 'true') {
+  window.location.href = 'dashboard.html';
+} else {
+  window.location.href = 'onboarding.html';
+}
+
 const SUPABASE_URL = 'https://vkxlggpmlydvpttheeym.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZreGxnZ3BtbHlkdnB0dGhlZXltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MTAyNzUsImV4cCI6MjEwNTM4NjI3NX0.KoHw21_j4akd-a_gJbx5aPGeKgyYDRVEFHlaVlV3XVw';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);

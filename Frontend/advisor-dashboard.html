@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Royal Square Financial | Advisor Dashboard</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="dashboard-body">
+  <div class="dashboard-layout">
+    <aside class="dashboard-sidebar" aria-label="Primary navigation">
+      <a class="dashboard-logo" href="advisor-dashboard.html">Royal Square <span>Financial</span></a>
+      <nav class="dashboard-nav">
+        <a class="dashboard-nav-link active" href="advisor-dashboard.html">Advisor Overview</a>
+        <a class="dashboard-nav-link" href="#kanbanBoard">Client Requests</a>
+        <a class="dashboard-nav-link" href="#compliance">Compliance</a>
+      </nav>
+      <button class="logout-button" id="logoutBtn" type="button">Log Out</button>
+    </aside>
+
+    <main class="dashboard-main bg-slate-50">
+      <header class="dashboard-header advisor-header">
+        <div>
+          <p class="eyebrow">Advisor workspace</p>
+          <h1>Welcome, Advisor</h1>
+          <p class="dashboard-subtitle">Review client onboarding and compliance progress.</p>
+        </div>
+        <span class="metric-pill">4 Active Client Requests</span>
+      </header>
+
+      <section id="kanbanBoard" class="kanban-board gap-6 overflow-x-auto" aria-label="Client onboarding requests">
+        <div id="col-pending" class="kanban-col min-w-[300px] bg-slate-100 rounded-xl p-4">
+          <div class="kanban-col-header">
+            <h2>Pending FICA/FAIS</h2>
+            <span>2</span>
+          </div>
+          <article class="kanban-card">
+            <strong>Thabo Mokoena</strong>
+            <span>FICA documents outstanding</span>
+          </article>
+          <article class="kanban-card">
+            <strong>Amara Ndlovu</strong>
+            <span>FAIS profile awaiting review</span>
+          </article>
+        </div>
+
+        <div id="col-review" class="kanban-col min-w-[300px] bg-slate-100 rounded-xl p-4">
+          <div class="kanban-col-header">
+            <h2>Under Review</h2>
+            <span>1</span>
+          </div>
+          <article class="kanban-card">
+            <strong>Daniel Jacobs</strong>
+            <span>Advice record in compliance review</span>
+          </article>
+        </div>
+
+        <div id="col-approved" class="kanban-col min-w-[300px] bg-slate-100 rounded-xl p-4">
+          <div class="kanban-col-header">
+            <h2>Approved &amp; Onboarded</h2>
+            <span>1</span>
+          </div>
+          <article class="kanban-card">
+            <strong>Leila van Wyk</strong>
+            <span>FAIS and POPIA consent signed</span>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="js/demo-switcher.js"></script>
+  <script src="js/advisor.js"></script>
+</body>
+</html>
