@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Royal Square Financial | Dashboard</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="dashboard-body">
+  <div class="dashboard-layout">
+    <aside class="dashboard-sidebar" aria-label="Primary navigation">
+      <a class="dashboard-logo" href="dashboard.html">Royal Square <span>Financial</span></a>
+      <nav class="dashboard-nav">
+        <a class="dashboard-nav-link active" href="dashboard.html">Overview</a>
+        <a class="dashboard-nav-link" href="#vault">Secure Vault</a>
+        <a class="dashboard-nav-link" href="#advisor-chat">Advisor Chat</a>
+      </nav>
+      <button class="logout-button" id="logoutBtn" type="button">Log Out</button>
+    </aside>
+
+    <main class="dashboard-main">
+      <header class="dashboard-header">
+        <div>
+          <p class="eyebrow">Client dashboard</p>
+          <h1>Good morning, John</h1>
+          <p class="dashboard-subtitle">Your secure financial picture at a glance.</p>
+        </div>
+        <span class="fica-badge"><span aria-hidden="true">✓</span> FICA Verified</span>
+      </header>
+
+      <section class="summary-grid" aria-label="Financial summary">
+        <article class="dashboard-card bg-white rounded-xl shadow-sm p-6">
+          <p class="card-label">Net Worth</p>
+          <strong class="net-worth-value" id="netWorth">R 1,850,000</strong>
+          <p class="card-note">Generated from your Stitch financial consent</p>
+        </article>
+
+        <article class="dashboard-card bg-white rounded-xl shadow-sm p-6">
+          <p class="card-label">Active Policies</p>
+          <ul class="policy-list">
+            <li><span>Motor insurance</span><strong>Santam</strong></li>
+            <li><span>Life cover</span><strong>Discovery</strong></li>
+          </ul>
+        </article>
+
+        <article class="dashboard-card bg-white rounded-xl shadow-sm p-6" id="vault">
+          <p class="card-label">Secure Vault</p>
+          <p class="vault-copy">Upload POPIA-compliant documents (Auto-encrypts)</p>
+          <label class="upload-control" id="vaultUploadButton" for="vaultUpload">Choose file
+            <input id="vaultUpload" type="file" accept=".pdf,.png,.jpg,.jpeg" />
+          </label>
+          <p class="upload-status" id="uploadStatus" role="status" aria-live="polite"></p>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

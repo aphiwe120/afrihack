@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Royal Square Financial | Authentication</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --slate-50: #f8fafc;
+      --slate-700: #334155;
+      --slate-900: #0f172a;
+      --blue-700: #1d4ed8;
+      --blue-800: #1e40af;
+      --purple-600: #9333ea;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: var(--slate-50);
+      color: var(--slate-900);
+      font: 15px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+    .auth-card {
+      width: min(100%, 420px);
+      padding: 40px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, .1);
+    }
+    .brand { margin: 0 0 8px; color: var(--purple-600); font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0 0 8px; font-size: 32px; letter-spacing: -.04em; }
+    .intro { margin: 0 0 28px; color: var(--slate-700); }
+    #authForm { display: grid; gap: 18px; }
+    label { color: var(--slate-700); font-size: 13px; font-weight: 700; }
+    input { width: 100%; margin-top: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+    input:focus { outline: none; border: 2px solid var(--purple-600); }
+    #submitBtn { padding: 13px 16px; border: 0; border-radius: 8px; background: var(--blue-700); color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+    #submitBtn:hover { background: var(--blue-800); }
+    #submitBtn:disabled { cursor: wait; opacity: .65; }
+    .toggle { margin: 22px 0 0; text-align: center; }
+    #toggleBtn { color: var(--purple-600); font-weight: 700; }
+    @media (max-width: 480px) { .auth-card { padding: 28px 22px; } }
+  </style>
+</head>
+<body>
+  <main class="auth-card">
+    <p class="brand">Royal Square Financial</p>
+    <h1>Secure access</h1>
+    <p class="intro">Continue to your financial workspace.</p>
+    <h2 id="authTitle">Log In</h2>
+    <div id="errorMsg" style="display:none; color: #dc2626; background: #fee2e2; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.875rem;"></div>
+    <form id="authForm">
+      <label>Email address
+        <input type="email" id="emailInput" required placeholder="you@example.com" autocomplete="email" />
+      </label>
+      <label>Password
+        <input type="password" id="passwordInput" required placeholder="••••••••" autocomplete="current-password" />
+      </label>
+      <button type="submit" id="submitBtn">Log In</button>
+    </form>
+    <p class="toggle"><a href="#" id="toggleBtn">Need an account? Sign up</a></p>
+  </main>
+  <script src="js/auth.js"></script>
+</body>
+</html>
